@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Responsive Gemini ChatBot - Full Page</title>
+    <link rel="stylesheet" href="style.css">
+	<script src="script.js"></script>
+  </head>
+  <body>
+    <div class="chat-container">
+      <div class="chat-header">
+        <h1>Gemini ChatBot</h1>
+      </div>
+      <div class="chat-body">
+        <!-- Chat messages display area -->
+        <div id="chatMessages" class="chat-messages">
+          <div class="message system">Welcome! Type your message below to start chatting.</div>
+        </div>
+        <!-- Redesigned Chat controls area for model selection and input -->
+        <div class="chat-controls">
+          <!-- Model selector container -->
+          <div class="model-selector">
+            <select id="modelSelect">
+              <option value="gemini-2.0-flash">gemini-2.0-flash</option>
+              <option value="gemma-3-27b-it">gemma-3-27b-it</option>
+            </select>
+          </div>
+          <!-- Chat input area with textarea and send button -->
+          <div class="chat-input">
+            <textarea id="userInput" placeholder="Type your message here..."></textarea>
+            <button id="sendBtn">Send</button>
+          </div>
+        </div>
+        <!-- Download container for inline data if present -->
+        <div id="downloadContainer"></div>
+      </div>
+    </div>
+
+    <script>
+      // Configuration object for the API
+      const generationConfig = {
+        temperature: 1,
+        topP: 0.95,
+        topK: 40,
+        maxOutputTokens: 8192,
+        responseMimeType: "text/plain",
+      };
+
+      // Global chat history array for conversation context
+      let chatHistory = [];
+
+      // Function to initialize and start a chat session
+      async function startChatSession(selectedModel) {
+        return {
+          sendMessage: async function (message) {
+            // Prepare the user message
+            const userMessage = {
+              role: "user",
+              parts: [{ text: message }],
+            };
+
+            // Combine history with the new message
+            const requestBody = {
+              contents: [...chatHistory, userMessage],
+              generationConfig: generationConfig,
+            };
+
+            // Construct the API endpoint URL with selected model and API key
+            const url = "https://generativelanguage.googleapis.com/v1beta/models/" + selectedModel + ":generateContent?key=" + apiKey;
+
+            // Send request to the Gemini API
+            const response = await fetch(url, {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify(requestBody),
+            });
+
+            if (!response.ok) {
+              throw new Error("API request failed with status " + response.status);
+            }
+
+            const result = await response.json();
+
+            // Extract and save model response for conversation context
+            if (result.candidates && result.candidates.length > 0) {
+              const modelResponse = {
+                role: "model",
+                parts: result.candidates[0].content.parts,
+              };
+              chatHistory = [...chatHistory, userMessage, modelResponse];
+            } else {
+              throw new Error("No candidates in API response");
+            }
+
+            return result;
+          },
+        };
+      }
+
+      // Function to map MIME types to file extensions
+      function mimeExtensionFromMime(mimeType) {
+        const map = {
+          "text/plain": "txt",
+          "image/jpeg": "jpg",
+          "image/png": "png",
+          "application/pdf": "pdf",
+        };
+        return map[mimeType] || "bin";
+      }
+
+      // Process and create download links for inline data from API response
+      function processInlineData(result) {
+        const downloadContainer = document.getElementById("downloadContainer");
+        downloadContainer.innerHTML = ""; // Clear previous download links
+
+        if (result.candidates && result.candidates.length > 0) {
+          result.candidates.forEach((candidate, candidateIndex) => {
+            if (candidate.content && candidate.content.parts) {
+              candidate.content.parts.forEach((part, partIndex) => {
+                if (part.inline_data) {
+                  // Decode and create downloadable file
+                  const inlineData = part.inline_data;
+                  const byteCharacters = atob(inlineData.data);
+                  const byteNumbers = new Array(byteCharacters.length);
+                  for (let i = 0; i < byteCharacters.length; i++) {
+                    byteNumbers[i] = byteCharacters.charCodeAt(i);
+                  }
+                  const byteArray = new Uint8Array(byteNumbers);
+                  const blob = new Blob([byteArray], { type: inlineData.mime_type });
+                  const downloadUrl = URL.createObjectURL(blob);
+                  const fileExtension = mimeExtensionFromMime(inlineData.mime_type);
+                  const filename = "output_" + candidateIndex + "_" + partIndex + "." + fileExtension;
+                  const link = document.createElement("a");
+                  link.href = downloadUrl;
+                  link.download = filename;
+                  link.textContent = "Download " + filename;
+                  link.classList.add("download-link");
+                  downloadContainer.appendChild(link);
+                }
+              });
+            }
+          });
+        }
+      }
+
+      // Append a message to the chat display area
+      function appendMessage(role, text) {
+        const chatMessages = document.getElementById("chatMessages");
+        const messageDiv = document.createElement("div");
+        messageDiv.classList.add("message", role);
+        messageDiv.textContent = text;
+        chatMessages.appendChild(messageDiv);
+        // Auto-scroll to the latest message
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+      }
+
+      // Main function to send chat messages and display responses
+      async function runChat() {
+        const inputField = document.getElementById("userInput");
+        const message = inputField.value.trim();
+        const modelSelect = document.getElementById("modelSelect");
+        const selectedModel = modelSelect.value; // dynamically read the model option
+
+        if (!message) {
+          alert("Please type a message before sending.");
+          return;
+        }
+
+        // Display the user's message in the chat area
+        appendMessage("user", message);
+        inputField.value = "";
+        appendMessage("system", "Sending...");
+
+        try {
+          const chatSession = await startChatSession(selectedModel);
+          const result = await chatSession.sendMessage(message);
+
+          // Remove the "Sending..." system message
+          const chatMessages = document.getElementById("chatMessages");
+          chatMessages.removeChild(chatMessages.lastChild);
+
+          // Process response and display text content
+          if (result.candidates && result.candidates.length > 0) {
+            const candidate = result.candidates[0];
+            if (candidate.content && candidate.content.parts) {
+              const textParts = candidate.content.parts
+                .filter(function (part) {
+                  return part.text;
+                })
+                .map(function (part) {
+                  return part.text;
+                })
+                .join("\n");
+              appendMessage("model", textParts || "No text response received.");
+              processInlineData(result);
+            } else {
+              appendMessage("system", "No content received from API.");
+            }
+          } else {
+            appendMessage("system", "No response candidates received from API.");
+          }
+        } catch (error) {
+          console.error("Error in chat session:", error);
+          appendMessage("system", "An error occurred: " + error.message);
+        }
+      }
+
+      // Event listeners for button click and hitting Enter key on the textarea
+      document.getElementById("sendBtn").addEventListener("click", runChat);
+      document.getElementById("userInput").addEventListener("keypress", function (e) {
+        if (e.key === "Enter" && !e.shiftKey) {
+          e.preventDefault();
+          runChat();
+        }
+      });
+    </script>
+  </body>
+</html>
