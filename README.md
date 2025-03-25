@@ -70,6 +70,6 @@ A responsive, full-page chat interface that integrates with the Gemini API. This
 - `script.js`: Contains the logic for chat interaction, API communication, and inline data processing.
 
 ## Demo
-
+https://yapweijun1996.github.io/Gemini-API-JavaScript-Sample/
 
 
