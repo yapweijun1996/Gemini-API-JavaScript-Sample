@@ -55,3 +55,7 @@ A responsive, full-page chat interface that leverages the Gemini API to deliver 
 https://yapweijun1996.github.io/Gemini-API-JavaScript-Sample/
 
 
+## Preview
+![image](https://github.com/user-attachments/assets/79c85c92-93ff-4c0d-8e01-107fd4a4dca6)
+
+
